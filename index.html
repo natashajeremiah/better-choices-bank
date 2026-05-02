@@ -1,0 +1,981 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0"/>
+<title>Better Choices Bank</title>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700&family=DM+Sans:wght@400;600&display=swap" rel="stylesheet"/>
+<script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+<script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent;}
+  body{background:#FAF6F0;font-family:'DM Sans',sans-serif;}
+  input,select,textarea,button{font-family:'DM Sans',sans-serif;}
+  input[type=range]{accent-color:#3D8B85;}
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel">
+// ── CONFIG ────────────────────────────────────────────────────
+const SUPABASE_URL = "https://alqqhgndmoajvxvhnvrq.supabase.co";
+const SUPABASE_KEY = "sb_publishable_gKrCK9dRB-oIfYf70ZlOmA_5Y_F9LjH";
+const ROW_ID = "natty-main";
+
+// ── SUPABASE ──────────────────────────────────────────────────
+async function sbLoad() {
+  try {
+    const r = await fetch(`${SUPABASE_URL}/rest/v1/entries?id=eq.${ROW_ID}&select=data`, {
+      headers:{"apikey":SUPABASE_KEY,"Authorization":`Bearer ${SUPABASE_KEY}`}
+    });
+    const rows = await r.json();
+    return rows.length > 0 ? rows[0].data : null;
+  } catch(e) { console.error("load error",e); return null; }
+}
+
+async function sbSave(data) {
+  try {
+    await fetch(`${SUPABASE_URL}/rest/v1/entries`, {
+      method:"POST",
+      headers:{
+        "apikey":SUPABASE_KEY,
+        "Authorization":`Bearer ${SUPABASE_KEY}`,
+        "Content-Type":"application/json",
+        "Prefer":"resolution=merge-duplicates"
+      },
+      body: JSON.stringify({id:ROW_ID, data, updated_at: new Date().toISOString()})
+    });
+  } catch(e) { console.error("save error",e); }
+}
+
+// ── CONSTANTS ─────────────────────────────────────────────────
+const P = {
+  teal:"#3D8B85",tealDark:"#1F5C57",tealLight:"#EAF4F3",
+  orange:"#D4874E",orangeLight:"#FBF0E6",orangeDark:"#8B4A1E",
+  pink:"#C47B8A",pinkLight:"#F7EEF1",pinkDark:"#7A3D4D",
+  champagne:"#F5E6D0",walnut:"#3B2314",cream:"#FAF6F0",muted:"#8A7060",
+};
+const FD = "'Playfair Display', Georgia, serif";
+const FB = "'DM Sans', sans-serif";
+
+const DEFAULT_REWARDS = [
+  "A massage — hands that work on you for once",
+  "A facial — skin care as the ritual it deserves to be",
+  "An evening out, on your terms",
+  "A piece of jewellery you've been circling",
+  "Something impractical that makes you feel like yourself",
+  "A spa afternoon — full stop",
+  "One beautiful thing you've been putting off",
+];
+
+const HABITS = {
+  Eating:[
+    {name:"Skipped a snack",val:1.00},
+    {name:"Built a crunch plate",val:0.75},
+    {name:"Healthy snack (3 elements)",val:0.75},
+    {name:"Low carb meal",val:0.75},
+    {name:"Protein first at dinner",val:0.50},
+    {name:"Finished my Yeti",val:0.50},
+    {name:"No snacking after dinner",val:1.00},
+    {name:"Used the indulgence directive",val:0.50},
+  ],
+  Movement:[
+    {name:"Went to OTF",val:2.00},
+    {name:"Went to the gym",val:2.00},
+    {name:"Completed a workout",val:2.00},
+    {name:"Went for a walk",val:0.50},
+    {name:"Took the stairs",val:0.50},
+    {name:"Took the long way around",val:0.50},
+  ],
+  "Self Care":[
+    {name:"Did my arrival ritual",val:0.75},
+    {name:"Meditated",val:0.75},
+    {name:"Asleep before 11 PM",val:0.50},
+    {name:"Asleep before midnight",val:0.25},
+    {name:"Took my supplements",val:0.25},
+    {name:"Had my nightcap ritual",val:0.25},
+    {name:"Resisted skin picking",val:0.50},
+    {name:"Resisted lip picking",val:0.50},
+    {name:"Wrote my one-line check-in",val:0.25},
+    {name:"Finished my Mama cup",val:0.50},
+    {name:"Finished my Yeti (water)",val:0.50},
+    {name:"Extra water",val:0.25},
+  ],
+  Misc:[
+    {name:"Shower",val:1.00},
+    {name:"Grateful moment",val:0.25},
+  ],
+};
+
+const CAT_ICONS = {Eating:"🌿",Movement:"✨","Self Care":"🕯️",Misc:"🧡",New:"🧡"};
+const CAT_COLORS = {
+  Eating:{bg:P.tealLight,text:P.tealDark,accent:P.teal},
+  Movement:{bg:P.orangeLight,text:P.orangeDark,accent:P.orange},
+  "Self Care":{bg:P.pinkLight,text:P.pinkDark,accent:P.pink},
+  Misc:{bg:P.champagne,text:P.walnut,accent:P.muted},
+};
+const DAYS = ["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"];
+const fmt = n => "$" + Number(n).toFixed(2);
+
+function uid() { return Date.now().toString(36) + Math.random().toString(36).slice(2,7); }
+
+function localDateStr(d) {
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
+}
+
+function localTimeStr(d) { return d.toTimeString().slice(0,5); }
+
+function rewardLabel(r) { const i = r.indexOf(" — "); return i>-1 ? r.slice(0,i) : r; }
+
+const DEFAULT = {
+  bank:0, entries:[], weeklies:[], cashouts:[], customHabits:[],
+  settings:{ratioGoal:51, showRatio:true, habitValues:{}, rewards:[...DEFAULT_REWARDS]},
+};
+
+// ── STYLES ────────────────────────────────────────────────────
+const card  = {background:"#fff",borderRadius:14,padding:"0.9rem 1rem",border:`1px solid ${P.champagne}`,marginBottom:8};
+const bigBtn = {width:"100%",padding:"0.9rem 1rem",borderRadius:12,border:"none",cursor:"pointer",fontSize:"0.95rem",fontWeight:600,marginTop:10};
+const smBtn  = {padding:"0.35rem 0.8rem",borderRadius:8,border:"none",cursor:"pointer",fontSize:"0.78rem",fontWeight:600};
+const inp    = {width:"100%",padding:"0.6rem 0.75rem",borderRadius:10,border:`1px solid ${P.champagne}`,background:"#fff",color:P.walnut,fontSize:"0.875rem",marginBottom:8,boxSizing:"border-box"};
+const secTitle = {fontSize:"0.65rem",fontWeight:700,color:P.muted,letterSpacing:"0.12em",textTransform:"uppercase",marginTop:20,marginBottom:8};
+const stepLbl  = {fontSize:"0.7rem",color:P.muted,letterSpacing:"0.08em",textTransform:"uppercase",marginBottom:4};
+const stepTitle = {fontFamily:FD,fontSize:"1.3rem",fontWeight:700,color:P.walnut,marginBottom:14};
+
+// ── HELPERS ───────────────────────────────────────────────────
+function parseCSVLine(line) {
+  const result=[]; let cur='', inQ=false;
+  for(let i=0;i<line.length;i++){
+    const c=line[i];
+    if(c==='"'){inQ=!inQ;}
+    else if(c===','&&!inQ){result.push(cur.trim());cur='';}
+    else{cur+=c;}
+  }
+  result.push(cur.trim());
+  return result;
+}
+
+// ── COMPONENTS ────────────────────────────────────────────────
+function Toast({msg,show,onUndo,hasUndo}){
+  return (
+    <div style={{position:"fixed",bottom:"1.5rem",left:"50%",transform:"translateX(-50%)",
+      background:P.walnut,color:P.champagne,padding:"0.5rem 0.6rem 0.5rem 1.4rem",
+      borderRadius:99,fontSize:"0.85rem",fontWeight:600,whiteSpace:"nowrap",zIndex:999,
+      transition:"opacity 0.3s",opacity:show?1:0,pointerEvents:show?"auto":"none",
+      display:"flex",alignItems:"center",gap:10}}>
+      <span>{msg}</span>
+      {hasUndo&&<button onClick={onUndo} style={{...smBtn,background:P.teal,color:"#fff",padding:"0.2rem 0.7rem",fontSize:"0.75rem"}}>Undo</button>}
+    </div>
+  );
+}
+
+function CatBar({label,icon,amount,max,color}){
+  const pct = max>0 ? Math.min((amount/max)*100,100) : 0;
+  return (
+    <div style={{marginBottom:10}}>
+      <div style={{display:"flex",justifyContent:"space-between",fontSize:"0.78rem",color:P.walnut,marginBottom:4}}>
+        <span>{icon} {label}</span>
+        <span style={{color,fontWeight:600}}>{fmt(amount)}</span>
+      </div>
+      <div style={{height:6,background:P.champagne,borderRadius:99,overflow:"hidden"}}>
+        <div style={{height:"100%",width:pct+"%",background:color,borderRadius:99,transition:"width 0.5s"}}/>
+      </div>
+    </div>
+  );
+}
+
+// ── APP ───────────────────────────────────────────────────────
+function App(){
+  const [data,setData]     = React.useState(DEFAULT);
+  const [ready,setReady]   = React.useState(false);
+  const [screen,setScreen] = React.useState("main");
+  const [period,setPeriod] = React.useState("day");
+  const [histTab,setHistTab] = React.useState("choices");
+  const [toast,setToast]   = React.useState({msg:"",show:false,hasUndo:false});
+  const undoRef     = React.useRef(null);
+  const timerRef    = React.useRef(null);
+
+  // log
+  const [logCat,setLogCat]   = React.useState(null);
+  const [logHabit,setLogHabit] = React.useState(null);
+  const [logStep,setLogStep] = React.useState("cat");
+  const [newName,setNewName] = React.useState("");
+  const [newVal,setNewVal]   = React.useState("0.50");
+  const [newCat,setNewCat]   = React.useState("Misc");
+  const [saveNew,setSaveNew] = React.useState(false);
+
+  // close call
+  const [closeCat,setCloseCat]     = React.useState(null);
+  const [closeNote,setCloseNote]   = React.useState("");
+  const [closeOutcome,setCloseOutcome] = React.useState(null);
+
+  // weekly
+  const [wWeight,setWWeight] = React.useState("");
+  const [wSkin,setWSkin]     = React.useState(null);
+  const [wEnergy,setWEnergy] = React.useState(3);
+  const [wInflam,setWInflam] = React.useState(2);
+
+  // cashout
+  const [cashoutAmt,setCashoutAmt]       = React.useState(null);
+  const [cashoutReward,setCashoutReward] = React.useState(null);
+
+  // manage / edit
+  const [manageMode,setManageMode] = React.useState(false);
+  const [editingId,setEditingId]   = React.useState(null);
+  const [editDate,setEditDate]     = React.useState("");
+  const [editTime,setEditTime]     = React.useState("");
+
+  // export
+  const [exportRange,setExportRange] = React.useState("all");
+  const [exportText,setExportText]   = React.useState(null);
+  const [copied,setCopied]           = React.useState(false);
+
+  // ── load ──
+  React.useEffect(()=>{
+    sbLoad().then(saved=>{
+      if(saved){
+        setData({
+          ...DEFAULT,...saved,
+          cashouts:saved.cashouts||[],
+          settings:{...DEFAULT.settings,...(saved.settings||{}),
+            rewards:saved.settings?.rewards||[...DEFAULT_REWARDS]}
+        });
+      }
+      setReady(true);
+    });
+  },[]);
+
+  // ── toast ──
+  const showToast = (msg, undoFn=null) => {
+    if(timerRef.current) clearTimeout(timerRef.current);
+    undoRef.current = undoFn;
+    setToast({msg,show:true,hasUndo:!!undoFn});
+    timerRef.current = setTimeout(()=>{ setToast(t=>({...t,show:false})); undoRef.current=null; },5000);
+  };
+  const handleUndo = () => {
+    if(undoRef.current) undoRef.current();
+    if(timerRef.current) clearTimeout(timerRef.current);
+    setToast(t=>({...t,show:false})); undoRef.current=null;
+  };
+
+  // ── persist ──
+  const persist = React.useCallback(next=>{ setData(next); sbSave(next); },[]);
+
+  // ── nav ──
+  const go = s => {
+    setScreen(s); setManageMode(false); setEditingId(null);
+    if(s==="log"){ setLogStep("cat");setLogCat(null);setLogHabit(null);setNewName("");setNewVal("0.50");setNewCat("Misc");setSaveNew(false); }
+    if(s==="closeCall"){ setCloseCat(null);setCloseNote("");setCloseOutcome(null); }
+    if(s==="cashout"){ setCashoutAmt(null);setCashoutReward(null); }
+  };
+
+  const settings = {...DEFAULT.settings,...(data.settings||{}),rewards:data.settings?.rewards||[...DEFAULT_REWARDS]};
+  const updSettings = patch => persist({...data,settings:{...settings,...patch}});
+
+  // ── bank calc ──
+  const recalcBank = (entries,cashouts) => {
+    const earned = entries.filter(e=>!e.closeCall).reduce((a,e)=>a+e.val,0);
+    const spent  = cashouts.reduce((a,c)=>a+c.amount,0);
+    return Math.round((earned-spent)*100)/100;
+  };
+
+  // ── period filter ──
+  const filterByPeriod = (items,p) => {
+    const now = new Date();
+    return items.filter(e=>{
+      const d=new Date(e.ts);
+      if(p==="day") return d.toDateString()===now.toDateString();
+      if(p==="week"){
+        const ws=new Date(now);
+        ws.setDate(now.getDate()+((now.getDay()===0?-6:1)-now.getDay()));
+        ws.setHours(0,0,0,0);
+        return d>=ws;
+      }
+      if(p==="month") return d.getMonth()===now.getMonth()&&d.getFullYear()===now.getFullYear();
+      return true;
+    });
+  };
+
+  const periodEntries = filterByPeriod(data.entries,period);
+  const earned = periodEntries.filter(e=>!e.closeCall).reduce((a,e)=>a+e.val,0);
+  const choiceCount = periodEntries.filter(e=>!e.closeCall).length;
+  const cats={Eating:0,Movement:0,"Self Care":0,Misc:0};
+  periodEntries.filter(e=>!e.closeCall).forEach(e=>{ cats[e.cat]=(cats[e.cat]||0)+e.val; });
+  const maxCat = Math.max(...Object.values(cats),0.01);
+
+  // ── actions ──
+  const confirmLog = () => {
+    if(!logHabit) return;
+    const entry={id:uid(),name:logHabit.name,val:logHabit.val,cat:logCat,ts:Date.now(),closeCall:false};
+    const ne=[...data.entries,entry];
+    persist({...data,entries:ne,bank:recalcBank(ne,data.cashouts)});
+    showToast("+"+fmt(logHabit.val)+" · That counts ✨");
+    go("main");
+  };
+
+  const logNew = () => {
+    const name=newName.trim()||"New choice";
+    const val=parseFloat(newVal)||0.25;
+    const next={...data};
+    if(saveNew) next.customHabits=[...data.customHabits,{name,val,cat:newCat}];
+    setLogHabit({name,val}); setLogCat(newCat); setLogStep("confirm");
+    persist(next);
+  };
+
+  const logCloseCall = () => {
+    const gaveIn = closeOutcome==="gaveIn";
+    const entry={id:uid(),
+      name:closeNote.trim()||(gaveIn?"Noticed the pull — gave in":"Noticed the pull — redirected"),
+      val:0,cat:closeCat||"Misc",ts:Date.now(),closeCall:true,gaveIn};
+    persist({...data,entries:[...data.entries,entry]});
+    showToast(gaveIn?"Logged — noticing it is still the work 🕯️":"Redirected — that's the ratio shifting ✨");
+    go("main");
+  };
+
+  const saveWeekly = () => {
+    const w={id:uid(),ts:Date.now(),weight:wWeight?parseFloat(wWeight):null,skin:wSkin,energy:wEnergy,inflam:wInflam};
+    persist({...data,weeklies:[...data.weeklies,w]});
+    showToast("Check-in saved ✨"); go("main");
+  };
+
+  const deleteEntry = id => {
+    const prev={...data};
+    const ne=data.entries.filter(e=>e.id!==id);
+    persist({...data,entries:ne,bank:recalcBank(ne,data.cashouts)});
+    showToast("Entry deleted",()=>persist(prev));
+  };
+
+  const deleteWeekly = id => {
+    const prev={...data};
+    persist({...data,weeklies:data.weeklies.filter(w=>w.id!==id)});
+    showToast("Check-in deleted",()=>persist(prev));
+  };
+
+  const deleteCashout = id => {
+    const prev={...data};
+    const nc=data.cashouts.filter(c=>c.id!==id);
+    persist({...data,cashouts:nc,bank:recalcBank(data.entries,nc)});
+    showToast("Cash out deleted",()=>persist(prev));
+  };
+
+  // ── edit entry date/time ──
+  const startEdit = e => {
+    const d=new Date(e.ts);
+    setEditingId(e.id);
+    setEditDate(localDateStr(d));
+    setEditTime(localTimeStr(d));
+  };
+
+  const saveEdit = () => {
+    if(!editDate||!editTime) return;
+    const newTs = new Date(`${editDate}T${editTime}`).getTime();
+    if(isNaN(newTs)) return;
+    const ne = data.entries.map(e=> e.id===editingId ? {...e,ts:newTs} : e);
+    persist({...data,entries:ne});
+    setEditingId(null);
+    showToast("Updated ✨");
+  };
+
+  // ── cashout ──
+  const cashoutIncrements = () => {
+    const b=data.bank; const inc=[];
+    let v=50;
+    while(v<b){ inc.push(v); v+=50; }
+    if(b>0) inc.push(Math.round(b*100)/100);
+    return [...new Set(inc)];
+  };
+
+  const confirmCashout = () => {
+    if(!cashoutAmt) return;
+    const c={id:uid(),ts:Date.now(),amount:cashoutAmt,reward:cashoutReward?rewardLabel(cashoutReward):null};
+    const nc=[...data.cashouts,c];
+    persist({...data,cashouts:nc,bank:recalcBank(data.entries,nc)});
+    showToast(`Cashed out ${fmt(cashoutAmt)} 🌿`);
+    go("main");
+  };
+
+  // ── export / import ──
+  const filteredForExport = range => {
+    if(range==="all") return {entries:data.entries,weeklies:data.weeklies};
+    return {entries:filterByPeriod(data.entries,range),weeklies:filterByPeriod(data.weeklies,range)};
+  };
+
+  const buildCSV = range => {
+    const {entries,weeklies}=filteredForExport(range);
+    const header="type,date,time,day_of_week,category_or_blank,choice_or_weight,val_or_skin,close_call_or_energy,gave_in_or_inflammation";
+    const cr=[...entries].sort((a,b)=>b.ts-a.ts).map(e=>{
+      const d=new Date(e.ts);
+      return `CHOICE,${localDateStr(d)},${localTimeStr(d)},${DAYS[d.getDay()]},${e.cat},"${e.name}",${e.val},${e.closeCall?"yes":"no"},${e.gaveIn?"yes":"no"}`;
+    });
+    const wr=weeklies.map(w=>{
+      const d=new Date(w.ts);
+      return `WEEKLY,${localDateStr(d)},${localTimeStr(d)},${DAYS[d.getDay()]},,${w.weight||""},${w.skin||""},${w.energy},${w.inflam}`;
+    });
+    return [header,...cr,...wr].join("\n");
+  };
+
+  const handleExport = () => { setExportText(buildCSV(exportRange)); setCopied(false); };
+  const handleCopy   = () => {
+    if(exportText) navigator.clipboard.writeText(exportText).then(()=>{ setCopied(true); setTimeout(()=>setCopied(false),2000); });
+  };
+
+  const importCSV = ev => {
+    const file=ev.target.files?.[0]; if(!file) return;
+    const reader=new FileReader();
+    reader.onload = e => {
+      try{
+        const lines=e.target.result.trim().split("\n");
+        if(!lines[0].toLowerCase().startsWith("type,")){ showToast("Unrecognised format"); return; }
+        let ne=0,nw=0;
+        const existingE=new Set(data.entries.map(e=>Number(e.ts)));
+        const existingW=new Set(data.weeklies.map(w=>Number(w.ts)));
+        const me=[...data.entries], mw=[...data.weeklies];
+        for(let i=1;i<lines.length;i++){
+          const line=lines[i].trim(); if(!line) continue;
+          const cols=parseCSVLine(line);
+          if(cols[0]==="CHOICE"){
+            const [,date,time,,cat,name,val,cc,gi]=cols;
+            const ts=new Date(`${date}T${time}`).getTime();
+            if(isNaN(ts)||existingE.has(ts)) continue;
+            me.push({id:uid(),name,val:parseFloat(val)||0,cat,ts,closeCall:cc==="yes",gaveIn:gi==="yes"});
+            existingE.add(ts); ne++;
+          } else if(cols[0]==="WEEKLY"){
+            const [,date,time,,,weight,skin,energy,inflam]=cols;
+            const ts=new Date(`${date}T${time}`).getTime();
+            if(isNaN(ts)||existingW.has(ts)) continue;
+            mw.push({id:uid(),ts,weight:parseFloat(weight)||null,skin,energy:parseInt(energy),inflam:parseInt(inflam)});
+            existingW.add(ts); nw++;
+          }
+        }
+        const newBank=recalcBank(me,data.cashouts);
+        persist({...data,entries:me,weeklies:mw,bank:newBank});
+        showToast(`Restored: ${ne} choices, ${nw} check-ins ✨`);
+      } catch(err){ console.error(err); showToast("Import failed — check the file"); }
+    };
+    reader.readAsText(file);
+    ev.target.value="";
+  };
+
+  // ── loading ──
+  if(!ready) return (
+    <div style={{fontFamily:FB,background:P.cream,minHeight:"100vh",maxWidth:420,margin:"0 auto",display:"flex",alignItems:"center",justifyContent:"center"}}>
+      <div style={{fontFamily:FD,fontSize:"1.2rem",color:P.muted}}>Loading your bank...</div>
+    </div>
+  );
+
+  // ═══════════════════════════════════════════════
+  // SCREENS
+  // ═══════════════════════════════════════════════
+
+  // ── MAIN ──────────────────────────────────────
+  if(screen==="main") return (
+    <div style={{maxWidth:420,margin:"0 auto",paddingBottom:80}}>
+      {/* header */}
+      <div style={{background:P.walnut,padding:"1.5rem 1.25rem 1.6rem",position:"relative",overflow:"hidden",minHeight:110}}>
+        <svg style={{position:"absolute",top:0,left:0,width:"100%",height:"100%",overflow:"visible"}} viewBox="0 0 420 110" preserveAspectRatio="none">
+          <rect x="18" y="12" width="52" height="82" rx="26" ry="26" fill={P.champagne} opacity="0.22" transform="rotate(-8,44,53)"/>
+          <rect x="18" y="12" width="52" height="82" rx="26" ry="26" fill={P.pink} opacity="0.7" transform="rotate(-8,44,53)"/>
+          <rect x="52" y="62" width="34" height="52" rx="17" ry="17" fill={P.champagne} opacity="0.22" transform="rotate(12,69,88)"/>
+          <rect x="52" y="62" width="34" height="52" rx="17" ry="17" fill={P.orange} opacity="0.75" transform="rotate(12,69,88)"/>
+          <rect x="310" y="-8" width="62" height="96" rx="31" ry="31" fill={P.champagne} opacity="0.2" transform="rotate(14,341,40)"/>
+          <rect x="310" y="-8" width="62" height="96" rx="31" ry="31" fill={P.teal} opacity="0.72" transform="rotate(14,341,40)"/>
+          <rect x="352" y="55" width="30" height="48" rx="15" ry="15" fill={P.champagne} opacity="0.22" transform="rotate(-6,367,79)"/>
+          <rect x="352" y="55" width="30" height="48" rx="15" ry="15" fill={P.pink} opacity="0.65" transform="rotate(-6,367,79)"/>
+        </svg>
+        <div style={{position:"relative",zIndex:2,display:"flex",justifyContent:"space-between",alignItems:"flex-start"}}>
+          <div>
+            <div style={{fontSize:"0.65rem",color:P.champagne,letterSpacing:"0.15em",opacity:0.85,marginBottom:6}}>BETTER CHOICES BANK</div>
+            <div style={{fontFamily:FD,fontSize:"2.8rem",fontWeight:700,color:P.champagne,lineHeight:1,letterSpacing:"-0.02em"}}>{fmt(data.bank)}</div>
+            <div style={{fontSize:"0.75rem",color:P.champagne,letterSpacing:"0.12em",textTransform:"uppercase",marginTop:4,opacity:0.9}}>your intentions, materialised</div>
+          </div>
+          <button onClick={()=>go("settings")} style={{background:"transparent",border:`1px solid ${P.champagne}50`,borderRadius:8,padding:"0.3rem 0.5rem",cursor:"pointer",fontSize:"1rem",marginTop:4}}>⚙️</button>
+        </div>
+      </div>
+
+      <div style={{padding:"0 1rem"}}>
+        {data.bank>=50&&(
+          <div style={{background:P.walnut,borderRadius:14,padding:"1rem 1.1rem",marginTop:14,display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+            <div>
+              <div style={{fontFamily:FD,fontSize:"1rem",color:P.champagne,fontWeight:700}}>You've earned something beautiful</div>
+              <div style={{fontSize:"0.75rem",color:P.tealLight,marginTop:2}}>Your bank reached {fmt(Math.floor(data.bank/50)*50)}</div>
+            </div>
+            <button style={{...smBtn,background:P.orange,color:"#fff"}} onClick={()=>go("cashout")}>Cash out</button>
+          </div>
+        )}
+
+        <button style={{...bigBtn,background:P.teal,color:"#fff",marginTop:16}} onClick={()=>go("log")}>🌿 I made a better choice</button>
+        <button style={{...bigBtn,background:"transparent",border:`1px solid ${P.muted}`,color:P.walnut}} onClick={()=>go("closeCall")}>🕯️ I felt the pull</button>
+
+        <div style={{display:"flex",gap:6,marginTop:14}}>
+          {[["day","Today"],["week","This week"],["month","This month"]].map(([p,label])=>(
+            <button key={p} style={{flex:1,padding:"0.4rem",textAlign:"center",fontSize:"0.72rem",borderRadius:8,
+              border:`1px solid ${period===p?P.teal:P.muted+"40"}`,cursor:"pointer",
+              background:period===p?P.teal:"transparent",color:period===p?"#fff":P.muted,fontWeight:period===p?600:400}}
+              onClick={()=>setPeriod(p)}>{label}</button>
+          ))}
+        </div>
+
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginTop:14}}>
+          <div style={{background:"#fff",borderRadius:12,padding:"0.85rem",border:`1px solid ${P.champagne}`}}>
+            <div style={{fontFamily:FD,fontSize:"1.6rem",fontWeight:700,color:P.teal,lineHeight:1}}>{fmt(earned)}</div>
+            <div style={{fontSize:"0.7rem",color:P.muted,marginTop:3}}>{period==="day"?"earned today":period==="week"?"this week":"this month"}</div>
+          </div>
+          <div style={{background:"#fff",borderRadius:12,padding:"0.85rem",border:`1px solid ${P.champagne}`}}>
+            <div style={{fontFamily:FD,fontSize:"1.6rem",fontWeight:700,color:P.pink,lineHeight:1}}>{choiceCount}</div>
+            <div style={{fontSize:"0.7rem",color:P.muted,marginTop:3}}>choices made</div>
+          </div>
+        </div>
+
+        {/* awareness ratio */}
+        {(()=>{
+          const pulls=filterByPeriod(data.entries.filter(e=>e.closeCall),period);
+          const redir=pulls.filter(e=>!e.gaveIn).length;
+          const total=pulls.length;
+          if(total===0) return null;
+          const pct=Math.round((redir/total)*100);
+          const goal=settings.ratioGoal;
+          const achieved=pct>=goal;
+          return (
+            <div style={{...card,marginTop:10}}>
+              <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:settings.showRatio?8:0}}>
+                <div style={{fontSize:"0.65rem",fontWeight:700,color:P.muted,letterSpacing:"0.1em",textTransform:"uppercase"}}>awareness ratio</div>
+                <button onClick={()=>updSettings({showRatio:!settings.showRatio})} style={{background:"transparent",border:"none",cursor:"pointer",fontSize:"0.72rem",color:P.muted}}>{settings.showRatio?"hide":"show"}</button>
+              </div>
+              {settings.showRatio&&<>
+                <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:6}}>
+                  <div style={{fontFamily:FD,fontSize:"1.6rem",fontWeight:700,color:achieved?P.teal:P.orange}}>{pct}%</div>
+                  <div style={{fontSize:"0.78rem",color:P.muted}}>redirected · {redir} of {total} · goal {goal}%</div>
+                </div>
+                <div style={{height:6,background:P.champagne,borderRadius:99,overflow:"hidden",position:"relative"}}>
+                  <div style={{position:"absolute",left:`${goal}%`,top:0,bottom:0,width:2,background:P.walnut,opacity:0.35,zIndex:1}}/>
+                  <div style={{height:"100%",width:pct+"%",background:achieved?P.teal:P.orange,borderRadius:99,transition:"width 0.5s"}}/>
+                </div>
+                <div style={{fontSize:"0.7rem",color:P.muted,marginTop:5}}>
+                  {achieved?"You're there. Protect it. 🌿":pct>=goal-10?"Almost there ✨":"You're building awareness — that's the whole first step 🕯️"}
+                </div>
+              </>}
+            </div>
+          );
+        })()}
+
+        <div style={secTitle}>by intention</div>
+        <CatBar label="Eating"    icon="🌿" amount={cats.Eating||0}       max={maxCat} color={P.teal}/>
+        <CatBar label="Movement"  icon="✨" amount={cats.Movement||0}     max={maxCat} color={P.orange}/>
+        <CatBar label="Self Care" icon="🕯️" amount={cats["Self Care"]||0} max={maxCat} color={P.pink}/>
+        <CatBar label="Misc"      icon="🧡" amount={cats.Misc||0}         max={maxCat} color={P.muted}/>
+
+        <div style={secTitle}>recent</div>
+        <div style={card}>
+          {[...periodEntries].sort((a,b)=>b.ts-a.ts).slice(0,8).length===0
+            ? <div style={{fontSize:"0.8rem",color:P.muted}}>Nothing logged yet. Make your first choice.</div>
+            : [...periodEntries].sort((a,b)=>b.ts-a.ts).slice(0,8).map((e,i,arr)=>{
+              const time=new Date(e.ts).toLocaleTimeString([],{hour:"2-digit",minute:"2-digit"});
+              return (
+                <div key={e.id} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"0.5rem 0",borderBottom:i===arr.length-1?"none":`1px solid ${P.champagne}`}}>
+                  <div>
+                    <div style={{fontSize:"0.85rem",color:P.walnut}}>{e.name}</div>
+                    <div style={{fontSize:"0.7rem",color:P.muted}}>{e.cat} · {time}</div>
+                  </div>
+                  <div style={{fontSize:"0.85rem",fontWeight:600,color:e.closeCall?P.orange:P.teal}}>{e.closeCall?"resist":fmt(e.val)}</div>
+                </div>
+              );
+            })
+          }
+        </div>
+
+        <div style={{display:"flex",gap:8,marginTop:4}}>
+          <button style={{...bigBtn,background:"transparent",border:`1px solid ${P.muted}`,color:P.walnut,margin:0,flex:1,fontSize:"0.8rem",padding:"0.6rem"}} onClick={()=>go("weekly")}>Weekly check-in</button>
+          <button style={{...bigBtn,background:"transparent",border:`1px solid ${P.muted}`,color:P.walnut,margin:0,flex:1,fontSize:"0.8rem",padding:"0.6rem"}} onClick={()=>go("history")}>History</button>
+        </div>
+      </div>
+      <Toast msg={toast.msg} show={toast.show} hasUndo={toast.hasUndo} onUndo={handleUndo}/>
+    </div>
+  );
+
+  // ── LOG ───────────────────────────────────────
+  if(screen==="log") return (
+    <div style={{maxWidth:420,margin:"0 auto",padding:"16px 1rem 80px"}}>
+      <button style={{...smBtn,background:"transparent",border:`1px solid ${P.muted}`,color:P.walnut,marginBottom:16}} onClick={()=>go("main")}>← back</button>
+
+      {logStep==="cat"&&<>
+        <div style={stepLbl}>step 1 of 3</div>
+        <div style={stepTitle}>What category?</div>
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,margin:"10px 0"}}>
+          {["Eating","Movement","Self Care","New"].map(cat=>(
+            <div key={cat} style={{padding:"0.8rem 0.5rem",borderRadius:12,border:`1px solid ${logCat===cat?P.teal:P.champagne}`,background:logCat===cat?P.tealLight:"#fff",cursor:"pointer",textAlign:"center"}}
+              onClick={()=>{ setLogCat(cat); setTimeout(()=>cat==="New"?setLogStep("new"):setLogStep("habits"),120); }}>
+              <div style={{fontSize:"1.3rem",marginBottom:4}}>{CAT_ICONS[cat]}</div>
+              <div style={{fontSize:"0.8rem",fontWeight:600,color:P.walnut}}>{cat}</div>
+            </div>
+          ))}
+        </div>
+      </>}
+
+      {logStep==="habits"&&<>
+        <div style={stepLbl}>step 2 of 3</div>
+        <div style={stepTitle}>{logCat} — what did you do?</div>
+        <div style={{maxHeight:"62vh",overflowY:"auto",paddingBottom:8}}>
+          {[...(HABITS[logCat]||[]),...data.customHabits.filter(h=>h.cat===logCat)].map((h,i)=>{
+            const val=settings.habitValues?.[h.name]??h.val;
+            return (
+              <div key={i} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"0.65rem 0.85rem",borderRadius:10,border:`1px solid ${logHabit?.name===h.name?P.teal:P.champagne}`,marginBottom:6,cursor:"pointer",background:logHabit?.name===h.name?P.tealLight:"#fff"}}
+                onClick={()=>{ setLogHabit({...h,val}); setTimeout(()=>setLogStep("confirm"),120); }}>
+                <span style={{fontSize:"0.875rem",color:P.walnut}}>{h.name}</span>
+                <span style={{fontSize:"0.8rem",fontWeight:600,color:P.teal}}>{fmt(val)}</span>
+              </div>
+            );
+          })}
+        </div>
+        <button style={{...smBtn,background:"transparent",border:`1px solid ${P.muted}`,color:P.walnut,marginTop:8}} onClick={()=>setLogStep("cat")}>← category</button>
+      </>}
+
+      {logStep==="new"&&<>
+        <div style={stepLbl}>step 2 of 3</div>
+        <div style={stepTitle}>Name this choice</div>
+        <input style={inp} placeholder="e.g. chose sparkling water instead" value={newName} onChange={e=>setNewName(e.target.value)} onFocus={e=>e.target.scrollIntoView({behavior:"smooth",block:"center"})}/>
+        <input style={inp} placeholder="reward value (e.g. 0.50)" type="number" step="0.25" min="0" inputMode="decimal" value={newVal} onChange={e=>setNewVal(e.target.value)} onFocus={e=>e.target.scrollIntoView({behavior:"smooth",block:"center"})}/>
+        <div style={{...secTitle,marginTop:8}}>save under category</div>
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:6,marginBottom:12}}>
+          {["Eating","Movement","Self Care","Misc"].map(cat=>(
+            <div key={cat} style={{padding:"0.5rem",borderRadius:10,border:`1px solid ${newCat===cat?P.teal:P.champagne}`,background:newCat===cat?P.tealLight:"#fff",cursor:"pointer",textAlign:"center",fontSize:"0.8rem",fontWeight:600,color:newCat===cat?P.tealDark:P.walnut}}
+              onClick={()=>setNewCat(cat)}>{CAT_ICONS[cat]} {cat}</div>
+          ))}
+        </div>
+        <div style={{display:"flex",gap:8,alignItems:"center",marginBottom:12}}>
+          <input type="checkbox" id="sn" checked={saveNew} onChange={e=>setSaveNew(e.target.checked)}/>
+          <label htmlFor="sn" style={{fontSize:"0.8rem",color:P.muted}}>Save this to my habits</label>
+        </div>
+        <button style={{...bigBtn,background:P.teal,color:"#fff"}} onClick={logNew}>Continue →</button>
+        <button style={{...smBtn,background:"transparent",border:`1px solid ${P.muted}`,color:P.walnut,marginTop:8}} onClick={()=>setLogStep("cat")}>← back</button>
+      </>}
+
+      {logStep==="confirm"&&logHabit&&<>
+        <div style={stepLbl}>step 3 of 3</div>
+        <div style={stepTitle}>Log this choice?</div>
+        <div style={{background:P.tealLight,borderRadius:12,padding:"0.85rem 1rem",marginBottom:16,border:`1px solid ${P.teal}20`}}>
+          <div style={{fontFamily:FD,fontSize:"1rem",color:P.tealDark,fontWeight:700}}>{logHabit.name}</div>
+          <div style={{fontSize:"0.8rem",color:P.teal,marginTop:3}}>{fmt(logHabit.val)} added to your bank</div>
+        </div>
+        <button style={{...bigBtn,background:P.teal,color:"#fff"}} onClick={confirmLog}>That's a choice worth celebrating ✨</button>
+        <button style={{...bigBtn,background:"transparent",border:`1px solid ${P.muted}`,color:P.walnut,fontSize:"0.8rem"}} onClick={()=>go("main")}>cancel</button>
+      </>}
+      <Toast msg={toast.msg} show={toast.show} hasUndo={toast.hasUndo} onUndo={handleUndo}/>
+    </div>
+  );
+
+  // ── CLOSE CALL ────────────────────────────────
+  if(screen==="closeCall") return (
+    <div style={{maxWidth:420,margin:"0 auto",padding:"16px 1rem 80px"}}>
+      <button style={{...smBtn,background:"transparent",border:`1px solid ${P.muted}`,color:P.walnut,marginBottom:16}} onClick={()=>go("main")}>← back</button>
+      <div style={stepTitle}>I felt the pull 🕯️</div>
+      <div style={{fontSize:"0.875rem",color:P.muted,marginBottom:16}}>The thought occurred. What happened next?</div>
+      <div style={{display:"flex",flexDirection:"column",gap:10,marginBottom:16}}>
+        {[["redirected","✨ I noticed — and redirected","The pull came. You chose differently.",P.teal,P.tealLight,P.tealDark],
+          ["gaveIn","🕯️ I noticed — and gave in","Still counts. Awareness is the whole first step.",P.orange,P.orangeLight,P.orangeDark]
+        ].map(([val,title,sub,border,bg,text])=>(
+          <div key={val} onClick={()=>setCloseOutcome(val)} style={{...card,cursor:"pointer",margin:0,borderColor:closeOutcome===val?border:P.champagne,background:closeOutcome===val?bg:"#fff"}}>
+            <div style={{fontWeight:600,color:text,fontSize:"0.9rem"}}>{title}</div>
+            <div style={{fontSize:"0.75rem",color:P.muted,marginTop:3}}>{sub}</div>
+          </div>
+        ))}
+      </div>
+      <div style={{fontSize:"0.65rem",fontWeight:700,color:P.muted,letterSpacing:"0.1em",textTransform:"uppercase",marginBottom:6}}>Category</div>
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:12}}>
+        {["Eating","Movement","Self Care","Misc"].map(cat=>(
+          <div key={cat} style={{padding:"0.8rem 0.5rem",borderRadius:12,border:`1px solid ${closeCat===cat?P.orange:P.champagne}`,background:closeCat===cat?P.orangeLight:"#fff",cursor:"pointer",textAlign:"center"}}
+            onClick={()=>setCloseCat(cat)}>
+            <div style={{fontSize:"0.82rem",fontWeight:600,color:P.walnut}}>{CAT_ICONS[cat]} {cat}</div>
+          </div>
+        ))}
+      </div>
+      <input style={{...inp,marginTop:4}} placeholder="What was the pull? (optional)" value={closeNote} onChange={e=>setCloseNote(e.target.value)} onFocus={e=>e.target.scrollIntoView({behavior:"smooth",block:"center"})}/>
+      <button style={{...bigBtn,background:P.orange,color:"#fff",opacity:closeOutcome?1:0.5}} onClick={()=>{ if(closeOutcome) logCloseCall(); }}>Log it</button>
+      <Toast msg={toast.msg} show={toast.show} hasUndo={toast.hasUndo} onUndo={handleUndo}/>
+    </div>
+  );
+
+  // ── WEEKLY ────────────────────────────────────
+  if(screen==="weekly") return (
+    <div style={{maxWidth:420,margin:"0 auto",padding:"16px 1rem 80px"}}>
+      <button style={{...smBtn,background:"transparent",border:`1px solid ${P.muted}`,color:P.walnut,marginBottom:16}} onClick={()=>go("main")}>← back</button>
+      <div style={stepTitle}>Weekly check-in</div>
+      <div style={card}>
+        <div style={{fontSize:"0.78rem",color:P.muted,marginBottom:6}}>WEIGHT (LBS)</div>
+        <input style={{...inp,margin:0}} type="number" inputMode="decimal" placeholder="e.g. 291" value={wWeight} onChange={e=>setWWeight(e.target.value)} onFocus={e=>e.target.scrollIntoView({behavior:"smooth",block:"center"})}/>
+        <div style={{fontSize:"0.78rem",color:P.muted,margin:"14px 0 6px"}}>SKIN</div>
+        <div style={{display:"flex",gap:6}}>
+          {["Poor","Fair","Good","Radiant"].map(s=>(
+            <div key={s} style={{flex:1,padding:"0.4rem",textAlign:"center",borderRadius:8,cursor:"pointer",fontSize:"0.75rem",fontWeight:600,background:wSkin===s?P.pink:P.champagne,color:wSkin===s?"#fff":P.walnut,border:`1px solid ${wSkin===s?P.pink:P.champagne}`}} onClick={()=>setWSkin(s)}>{s}</div>
+          ))}
+        </div>
+        <div style={{fontSize:"0.78rem",color:P.muted,margin:"14px 0 6px"}}>ENERGY</div>
+        <div style={{display:"flex",alignItems:"center",gap:10}}>
+          <input type="range" min="0" max="5" step="1" value={wEnergy} onChange={e=>setWEnergy(Number(e.target.value))} style={{flex:1}}/>
+          <span style={{fontWeight:600,color:P.teal,minWidth:20}}>{wEnergy}</span>
+        </div>
+        <div style={{fontSize:"0.78rem",color:P.muted,margin:"14px 0 6px"}}>INFLAMMATION</div>
+        <div style={{display:"flex",alignItems:"center",gap:10}}>
+          <input type="range" min="0" max="5" step="1" value={wInflam} onChange={e=>setWInflam(Number(e.target.value))} style={{flex:1}}/>
+          <span style={{fontWeight:600,color:P.orange,minWidth:20}}>{wInflam}</span>
+        </div>
+      </div>
+      <button style={{...bigBtn,background:P.teal,color:"#fff"}} onClick={saveWeekly}>Save check-in ✨</button>
+      <Toast msg={toast.msg} show={toast.show} hasUndo={toast.hasUndo} onUndo={handleUndo}/>
+    </div>
+  );
+
+  // ── HISTORY ───────────────────────────────────
+  if(screen==="history") return (
+    <div style={{maxWidth:420,margin:"0 auto",padding:"16px 1rem 80px"}}>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}>
+        <button style={{...smBtn,background:"transparent",border:`1px solid ${P.muted}`,color:P.walnut}} onClick={()=>go("main")}>← back</button>
+        {histTab!=="export"&&(
+          <button style={{...smBtn,background:manageMode?P.pink:P.champagne,color:manageMode?"#fff":P.walnut,border:"none"}}
+            onClick={()=>{ setManageMode(m=>!m); setEditingId(null); }}>
+            {manageMode?"Done":"Manage"}
+          </button>
+        )}
+      </div>
+
+      <div style={{display:"flex",borderBottom:`1px solid ${P.champagne}`,marginBottom:14,overflowX:"auto"}}>
+        {[["choices","Choices"],["weekly","Weekly"],["cashout","Cash Out"],["export","Export"]].map(([t,label])=>(
+          <div key={t} style={{flex:"0 0 auto",padding:"0.5rem 0.75rem",textAlign:"center",fontSize:"0.78rem",cursor:"pointer",
+            color:histTab===t?P.teal:P.muted,borderBottom:histTab===t?`2px solid ${P.teal}`:"2px solid transparent",fontWeight:histTab===t?600:400}}
+            onClick={()=>{ setHistTab(t); setEditingId(null); }}>{label}</div>
+        ))}
+      </div>
+
+      {/* CHOICES */}
+      {histTab==="choices"&&(()=>{
+        const byDay={};
+        [...data.entries].sort((a,b)=>b.ts-a.ts).forEach(e=>{
+          const d=new Date(e.ts).toLocaleDateString([],{weekday:"long",month:"long",day:"numeric"});
+          if(!byDay[d]) byDay[d]=[];
+          byDay[d].push(e);
+        });
+        if(Object.keys(byDay).length===0) return <div style={{fontSize:"0.875rem",color:P.muted}}>No entries yet.</div>;
+        return Object.entries(byDay).map(([day,entries])=>{
+          const tot=entries.filter(e=>!e.closeCall).reduce((a,e)=>a+e.val,0);
+          const sorted=[...entries].sort((a,b)=>b.ts-a.ts);
+          return (
+            <div key={day} style={card}>
+              <div style={{fontSize:"0.75rem",color:P.muted,marginBottom:8,fontWeight:600}}>{day} — {fmt(tot)} earned</div>
+              <div style={{display:"flex",flexWrap:"wrap",gap:4}}>
+                {sorted.map(e=>{
+                  const t=new Date(e.ts).toLocaleTimeString([],{hour:"2-digit",minute:"2-digit"});
+                  const cc=CAT_COLORS[e.cat]||CAT_COLORS.Misc;
+                  const isEditing=editingId===e.id;
+                  return (
+                    <div key={e.id} style={{width:"100%"}}>
+                      <span style={{display:"inline-flex",alignItems:"center",gap:4,fontSize:"0.7rem",background:cc.bg,color:cc.text,padding:"2px 8px",borderRadius:99,fontWeight:500,marginBottom:isEditing?4:0}}>
+                        {e.name} · {e.closeCall?"resist":fmt(e.val)} · {t}
+                        {manageMode&&<>
+                          <button onClick={()=>{ if(isEditing){setEditingId(null);}else{startEdit(e);} }} style={{background:"none",border:"none",cursor:"pointer",color:cc.text,fontSize:"0.75rem",padding:"0 0 0 2px",lineHeight:1}}>✏️</button>
+                          <button onClick={()=>deleteEntry(e.id)} style={{background:"none",border:"none",cursor:"pointer",color:cc.text,fontWeight:700,fontSize:"0.75rem",padding:"0 0 0 2px",lineHeight:1}}>✕</button>
+                        </>}
+                      </span>
+                      {isEditing&&(
+                        <div style={{background:P.cream,borderRadius:10,padding:"0.6rem 0.75rem",border:`1px solid ${P.champagne}`,marginTop:4,display:"flex",flexDirection:"column",gap:6}}>
+                          <div style={{fontSize:"0.7rem",color:P.muted,fontWeight:600,textTransform:"uppercase",letterSpacing:"0.08em"}}>Edit date &amp; time</div>
+                          <div style={{display:"flex",gap:8}}>
+                            <input type="date" value={editDate} onChange={e=>setEditDate(e.target.value)}
+                              style={{...inp,margin:0,flex:1,fontSize:"0.82rem",padding:"0.4rem 0.6rem"}}/>
+                            <input type="time" value={editTime} onChange={e=>setEditTime(e.target.value)}
+                              style={{...inp,margin:0,flex:1,fontSize:"0.82rem",padding:"0.4rem 0.6rem"}}/>
+                          </div>
+                          <div style={{display:"flex",gap:8}}>
+                            <button onClick={saveEdit} style={{...smBtn,background:P.teal,color:"#fff",flex:1}}>Save</button>
+                            <button onClick={()=>setEditingId(null)} style={{...smBtn,background:"transparent",border:`1px solid ${P.muted}`,color:P.walnut,flex:1}}>Cancel</button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          );
+        });
+      })()}
+
+      {/* WEEKLY */}
+      {histTab==="weekly"&&(
+        data.weeklies.length===0
+          ? <div style={{fontSize:"0.875rem",color:P.muted}}>No check-ins yet.</div>
+          : [...data.weeklies].reverse().map(w=>{
+            const d=new Date(w.ts).toLocaleDateString([],{weekday:"long",month:"long",day:"numeric"});
+            return (
+              <div key={w.id} style={{...card,display:"flex",justifyContent:"space-between",alignItems:"flex-start"}}>
+                <div style={{flex:1}}>
+                  <div style={{fontSize:"0.75rem",color:P.muted,marginBottom:8,fontWeight:600}}>{d}</div>
+                  <div style={{display:"flex",flexWrap:"wrap",gap:4}}>
+                    {[w.weight&&`${w.weight} lbs`,w.skin&&`skin: ${w.skin}`,`energy: ${w.energy}/5`,`inflammation: ${w.inflam}/5`].filter(Boolean).map((chip,j)=>(
+                      <span key={j} style={{fontSize:"0.7rem",background:P.tealLight,color:P.tealDark,padding:"2px 8px",borderRadius:99,fontWeight:500}}>{chip}</span>
+                    ))}
+                  </div>
+                </div>
+                {manageMode&&<button onClick={()=>deleteWeekly(w.id)} style={{background:"none",border:"none",cursor:"pointer",color:P.muted,fontWeight:700,fontSize:"1rem",padding:"0 0 0 8px"}}>✕</button>}
+              </div>
+            );
+          })
+      )}
+
+      {/* CASH OUT */}
+      {histTab==="cashout"&&(
+        data.cashouts.length===0
+          ? <div style={{fontSize:"0.875rem",color:P.muted}}>No cash outs yet.</div>
+          : [...data.cashouts].reverse().map(c=>{
+            const d=new Date(c.ts).toLocaleDateString([],{weekday:"long",month:"long",day:"numeric"});
+            return (
+              <div key={c.id} style={{...card,display:"flex",justifyContent:"space-between",alignItems:"flex-start"}}>
+                <div style={{flex:1}}>
+                  <div style={{fontSize:"0.75rem",color:P.muted,marginBottom:4,fontWeight:600}}>{d}</div>
+                  <div style={{display:"flex",flexWrap:"wrap",gap:4,alignItems:"center"}}>
+                    <span style={{fontSize:"0.85rem",fontWeight:700,color:P.walnut,fontFamily:FD}}>{fmt(c.amount)}</span>
+                    {c.reward&&<span style={{fontSize:"0.7rem",background:P.orangeLight,color:P.orangeDark,padding:"2px 8px",borderRadius:99,fontWeight:500}}>🎁 {c.reward}</span>}
+                  </div>
+                </div>
+                {manageMode&&<button onClick={()=>deleteCashout(c.id)} style={{background:"none",border:"none",cursor:"pointer",color:P.muted,fontWeight:700,fontSize:"1rem",padding:"0 0 0 8px"}}>✕</button>}
+              </div>
+            );
+          })
+      )}
+
+      {/* EXPORT */}
+      {histTab==="export"&&(
+        <div>
+          <div style={{fontSize:"0.875rem",color:P.muted,marginBottom:16}}>Generate your backup, copy the text, and paste it into Notes or email it to yourself.</div>
+          <div style={secTitle}>date range</div>
+          <div style={{display:"flex",gap:6,marginBottom:16}}>
+            {[["all","All time"],["month","This month"],["week","This week"]].map(([v,l])=>(
+              <button key={v} style={{flex:1,padding:"0.4rem",fontSize:"0.75rem",borderRadius:8,border:`1px solid ${exportRange===v?P.teal:P.champagne}`,background:exportRange===v?P.tealLight:"#fff",color:exportRange===v?P.tealDark:P.walnut,cursor:"pointer",fontWeight:exportRange===v?600:400}}
+                onClick={()=>{ setExportRange(v); setExportText(null); }}>{l}</button>
+            ))}
+          </div>
+          <button style={{...bigBtn,background:P.teal,color:"#fff",marginTop:0}} onClick={handleExport}>Generate backup</button>
+          {exportText&&(
+            <div style={{...card,marginTop:10,padding:"0.75rem"}}>
+              <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
+                <span style={{fontSize:"0.72rem",fontWeight:600,color:P.muted,textTransform:"uppercase",letterSpacing:"0.05em"}}>Copy all of this</span>
+                <button onClick={handleCopy} style={{...smBtn,background:copied?P.teal:P.orange,color:"#fff"}}>{copied?"Copied ✓":"Copy all"}</button>
+              </div>
+              <textarea readOnly value={exportText} onClick={e=>e.target.select()}
+                style={{width:"100%",height:110,fontSize:"0.62rem",fontFamily:"monospace",border:`1px solid ${P.champagne}`,borderRadius:8,padding:"0.5rem",background:P.cream,color:P.walnut,resize:"none",boxSizing:"border-box"}}/>
+            </div>
+          )}
+          <div style={{...secTitle,marginTop:20}}>restore</div>
+          <div style={card}>
+            <div style={{fontSize:"0.8rem",color:P.walnut,fontWeight:600,marginBottom:4}}>Upload backup file</div>
+            <div style={{fontSize:"0.75rem",color:P.muted,marginBottom:10}}>Merges without duplicates.</div>
+            <label style={{...bigBtn,background:P.teal,color:"#fff",display:"block",textAlign:"center",cursor:"pointer",margin:0,padding:"0.7rem"}}>
+              Choose file
+              <input type="file" accept=".csv,.txt" style={{display:"none"}} onChange={importCSV}/>
+            </label>
+          </div>
+        </div>
+      )}
+      <Toast msg={toast.msg} show={toast.show} hasUndo={toast.hasUndo} onUndo={handleUndo}/>
+    </div>
+  );
+
+  // ── CASHOUT ───────────────────────────────────
+  if(screen==="cashout") return (
+    <div style={{maxWidth:420,margin:"0 auto",padding:"16px 1rem 80px"}}>
+      <button style={{...smBtn,background:"transparent",border:`1px solid ${P.muted}`,color:P.walnut,marginBottom:16}} onClick={()=>go("main")}>← back</button>
+      <div style={{textAlign:"center",padding:"0.5rem 0 1rem"}}>
+        <div style={{fontSize:"2rem",marginBottom:8}}>🌿✨🕯️</div>
+        <div style={{fontFamily:FD,fontSize:"1.5rem",fontWeight:700,color:P.walnut}}>You've earned something beautiful</div>
+        <div style={{fontSize:"0.875rem",color:P.muted,marginTop:4}}>Balance: <strong>{fmt(data.bank)}</strong></div>
+      </div>
+      <div style={secTitle}>how much to cash out?</div>
+      <div style={{display:"flex",flexWrap:"wrap",gap:8,marginBottom:20}}>
+        {cashoutIncrements().map(amt=>(
+          <div key={amt} onClick={()=>setCashoutAmt(amt)} style={{padding:"0.5rem 1rem",borderRadius:10,border:`1px solid ${cashoutAmt===amt?P.teal:P.champagne}`,background:cashoutAmt===amt?P.tealLight:"#fff",cursor:"pointer",fontWeight:600,fontSize:"0.9rem",color:cashoutAmt===amt?P.tealDark:P.walnut}}>
+            {fmt(amt)}{amt===Math.round(data.bank*100)/100?" (all)":""}
+          </div>
+        ))}
+      </div>
+      <div style={secTitle}>treat yourself to — <span style={{color:P.muted,fontWeight:400,textTransform:"none",letterSpacing:0}}>optional</span></div>
+      <div style={{display:"flex",flexDirection:"column",gap:6,marginBottom:20}}>
+        {settings.rewards.map((r,i)=>(
+          <div key={i} onClick={()=>setCashoutReward(r===cashoutReward?null:r)} style={{...card,cursor:"pointer",margin:0,padding:"0.65rem 0.85rem",borderColor:cashoutReward===r?P.orange:P.champagne,background:cashoutReward===r?P.orangeLight:"#fff"}}>
+            <span style={{fontSize:"0.875rem",color:cashoutReward===r?P.orangeDark:P.walnut,fontWeight:cashoutReward===r?600:400}}>{r}</span>
+          </div>
+        ))}
+      </div>
+      <button style={{...bigBtn,background:cashoutAmt?P.pink:"#ccc",color:"#fff",opacity:cashoutAmt?1:0.6}} onClick={confirmCashout}>
+        {cashoutAmt?`Cash out ${fmt(cashoutAmt)}${cashoutReward?" · "+rewardLabel(cashoutReward):""}` : "Select an amount"}
+      </button>
+      <button style={{...bigBtn,background:"transparent",border:`1px solid ${P.muted}`,color:P.walnut,fontSize:"0.8rem"}} onClick={()=>go("main")}>not yet</button>
+      <Toast msg={toast.msg} show={toast.show} hasUndo={toast.hasUndo} onUndo={handleUndo}/>
+    </div>
+  );
+
+  // ── SETTINGS ──────────────────────────────────
+  if(screen==="settings") return (
+    <div style={{maxWidth:420,margin:"0 auto",padding:"16px 1rem 80px"}}>
+      <button style={{...smBtn,background:"transparent",border:`1px solid ${P.muted}`,color:P.walnut,marginBottom:16}} onClick={()=>go("main")}>← back</button>
+      <div style={stepTitle}>Settings ⚙️</div>
+
+      <div style={secTitle}>awareness ratio goal</div>
+      <div style={{display:"flex",flexDirection:"column",gap:8,marginBottom:20}}>
+        {[{label:"51 / 49 — just starting",value:51},{label:"60 / 40 — building",value:60},{label:"80 / 20 — the goal",value:80}].map(opt=>(
+          <div key={opt.value} onClick={()=>updSettings({ratioGoal:opt.value})} style={{...card,cursor:"pointer",margin:0,borderColor:settings.ratioGoal===opt.value?P.teal:P.champagne,background:settings.ratioGoal===opt.value?P.tealLight:"#fff"}}>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+              <span style={{fontSize:"0.875rem",fontWeight:600,color:settings.ratioGoal===opt.value?P.tealDark:P.walnut}}>{opt.label}</span>
+              {settings.ratioGoal===opt.value&&<span style={{color:P.teal}}>✓</span>}
+            </div>
+          </div>
+        ))}
+      </div>
+
+      <div style={secTitle}>awareness ratio on dashboard</div>
+      <div style={{...card,display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:20}}>
+        <span style={{fontSize:"0.875rem",color:P.walnut}}>Show ratio card</span>
+        <div onClick={()=>updSettings({showRatio:!settings.showRatio})} style={{width:44,height:24,borderRadius:99,background:settings.showRatio?P.teal:P.champagne,position:"relative",cursor:"pointer",transition:"background 0.2s"}}>
+          <div style={{position:"absolute",top:3,left:settings.showRatio?22:3,width:18,height:18,borderRadius:"50%",background:"#fff",transition:"left 0.2s",boxShadow:"0 1px 3px rgba(0,0,0,0.2)"}}/>
+        </div>
+      </div>
+
+      <div style={secTitle}>rewards list</div>
+      <div style={{marginBottom:8}}>
+        {settings.rewards.map((r,i)=>(
+          <div key={i} style={{...card,margin:"0 0 6px",padding:"0.6rem 0.85rem",display:"flex",alignItems:"center",gap:8}}>
+            <input value={r} onChange={e=>{ const u=[...settings.rewards]; u[i]=e.target.value; updSettings({rewards:u}); }}
+              style={{...inp,margin:0,flex:1,fontSize:"0.8rem",padding:"0.3rem 0.5rem"}}
+              onFocus={e=>e.target.scrollIntoView({behavior:"smooth",block:"center"})}/>
+            <button onClick={()=>updSettings({rewards:settings.rewards.filter((_,j)=>j!==i)})} style={{...smBtn,background:"transparent",border:`1px solid ${P.champagne}`,color:P.muted,padding:"0.3rem 0.5rem"}}>✕</button>
+          </div>
+        ))}
+        <button style={{...bigBtn,background:"transparent",border:`1px solid ${P.teal}`,color:P.teal,marginTop:4,fontSize:"0.85rem"}} onClick={()=>updSettings({rewards:[...settings.rewards,"New reward"]})}>+ Add reward</button>
+      </div>
+
+      <div style={secTitle}>reward values</div>
+      {Object.entries(HABITS).map(([cat,habits])=>(
+        <div key={cat} style={{marginBottom:16}}>
+          <div style={{fontSize:"0.75rem",fontWeight:600,color:P.muted,marginBottom:6}}>{CAT_ICONS[cat]} {cat}</div>
+          {[...habits,...data.customHabits.filter(h=>h.cat===cat)].map(h=>{
+            const cv=settings.habitValues?.[h.name]??h.val;
+            return (
+              <div key={h.name} style={{...card,margin:"0 0 6px",padding:"0.6rem 0.85rem",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                <span style={{fontSize:"0.8rem",color:P.walnut,flex:1,paddingRight:8}}>{h.name}</span>
+                <select value={cv} onChange={e=>updSettings({habitValues:{...settings.habitValues,[h.name]:parseFloat(e.target.value)}})}
+                  style={{fontSize:"0.8rem",border:`1px solid ${P.champagne}`,borderRadius:6,padding:"0.2rem 0.4rem",background:"#fff",color:P.teal,fontWeight:600,cursor:"pointer"}}>
+                  {[0.25,0.50,0.75,1.00,1.50,2.00].map(v=><option key={v} value={v}>${v.toFixed(2)}</option>)}
+                </select>
+              </div>
+            );
+          })}
+        </div>
+      ))}
+      <Toast msg={toast.msg} show={toast.show} hasUndo={toast.hasUndo} onUndo={handleUndo}/>
+    </div>
+  );
+
+  return null;
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(<App/>);
+</script>
+</body>
+</html>
